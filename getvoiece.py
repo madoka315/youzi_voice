@@ -75,7 +75,7 @@ class getvoice(object):
         
     async def gethash(self,text):
         if len(text) < 61 :
-            result = await self.gethash2(text)
+            result = await self.gethash3(text)
             return result
         else:
             round = int(len(text)/60)
@@ -83,7 +83,7 @@ class getvoice(object):
             output_IO = io.BytesIO()
             for it in range(round+1):
                 text2 = text[it*60:(it+1)*60]
-                await self.gethash2(text2)
+                await self.gethash3(text2)
                 IO_list += [self.b_io]
             count = range(len(IO_list))
             data = []
@@ -98,6 +98,40 @@ class getvoice(object):
             output.close()   
             base64_str = 'base64://' + base64.b64encode(output_IO.getvalue()).decode()
             return base64_str
+
+    async def gethash3(self, text):
+        temphash = local_hash()
+        uri = 'wss://skytnt-moe-tts.hf.space/queue/join'
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(uri, proxy='http://127.0.0.1:7890') as ws:
+                async for msg in ws:
+                    a = json.loads(msg.data)
+                    if a["msg"] == "send_hash":
+                        if self.count_hash == 0:
+                            message = {"session_hash":temphash,"fn_index":0}
+                            message = str(message)
+                            message = message.replace(" ","")
+                            message = message.replace("'",'"')
+                            message = message.replace("False",'false')                        
+                            #print(message)
+                            await ws.send_str(message)
+                        self.count_hash = 1
+                    if a["msg"] == "send_data":
+                        if self.count == 0:
+                            message = {"fn_index":self.num,"data":[text,self.speaker,1,False],"session_hash":temphash}
+                            message = str(message)
+                            #message = message.replace(" ","")
+                            message = message.replace("'",'"')
+                            message = message.replace("False",'false')
+                            #print(message)
+                            await ws.send_str(message)
+                        self.count = 1
+                    if a["msg"] == "process_completed":
+                        self.count = 0
+                        self.count_hash = 0
+                        self.voicehash = a["output"]["data"][1]
+                        break
+        return 'base64://' + self.voicehash[len("data:audio/wav;base64,"):]
 
     async def gethash2(self,text):
         temphash = local_hash()
